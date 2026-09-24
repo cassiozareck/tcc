@@ -52,16 +52,18 @@ sent_tasks = []  # tarefas de envio disparadas, guardadas pra sabermos quando o 
 
 async def run_truck(truck_id, origin, dest, start_delay):
     """Anda em linha reta da origem rumo ao destino, disparando cada posição sem esperar a resposta."""
-    await asyncio.sleep(start_delay)
+    await asyncio.sleep(start_delay) # evita todos iniciarem ao mesmo instante
 
     _, lat, lon = origin
     _, lat_d, lon_d = dest
     label = f"[Caminhão {truck_id} | {origin[0]} -> {dest[0]}]"
 
+    # cálculo para se aproximar do destino
     dist = math.hypot(lat_d - lat, lon_d - lon)
     step_lat = (lat_d - lat) / dist * STEP_SIZE
     step_lon = (lon_d - lon) / dist * STEP_SIZE
 
+     # envia localização STEPS vezes
     for step in range(1, STEPS + 1):
         lat += step_lat
         lon += step_lon
@@ -88,13 +90,16 @@ async def main():
 
     # sorteia origem/destino por caminhão (permite NUM_TRUCKS > 10)
     pairs = [(random.choice(ORIGENS), random.choice(DESTINOS)) for _ in range(NUM_TRUCKS)]
+
+    # para cada caminhao aloca a função run truck para rodar em background, iniciando em intervalos
+    # distintos para simular a frota mais realísticamente
     tasks = [
         run_truck(truck_id, origin, dest, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS))
         for truck_id, (origin, dest) in enumerate(pairs, start=1)
     ]
 
     start = time.perf_counter()
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks) # espera terminar o processamento para medir métricas
 
     print(f"\nTodos os caminhões terminaram de enviar, aguardando o processing-engine responder tudo...")
     results = await asyncio.gather(*sent_tasks, return_exceptions=True)

@@ -1,9 +1,8 @@
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
 
-
+# Estrutura de mensagem recebida da frota
 class TruckData(BaseModel):
     truck_id: int
     latitude: float
@@ -13,18 +12,18 @@ class TruckData(BaseModel):
 
 app = FastAPI()
 
-trucks = {}
+trucks = {} # Guarda últimas 3 coordenadas dos caminhões
 
 calls = 0
 
+# Endpoint para processamento de uma coordenada unitária
 @app.post("/process")
 async def process(truck_data: TruckData):
     global calls
     calls += 1
-    print(f"Procesando: {truck_data.truck_id}")
     print(f"Chamadas: {calls}")
 
-    # Inicialmente devemos calcular o ETA
+    # Inicialmente devemos calcular o ETA, colocamos no corpo da mensagem latitude e longitude origem e destino
     route_params = {
         "profile": "car",
         "points_encoded": "false",
@@ -34,7 +33,7 @@ async def process(truck_data: TruckData):
         ]
     }
 
-    resp = requests.get(f"http://localhost:8989/route", params=route_params)
+    resp = requests.get(f"http://localhost:8989/route", params=route_params) # Envia para GraphHopper
 
     if resp.status_code != 200:
         raise Exception(f"Erro no cálculo do ETA: {resp.text}")
@@ -43,11 +42,11 @@ async def process(truck_data: TruckData):
     if not route_paths:
         raise Exception("Erro no cálculo do ETA: nenhuma rota retornada")
 
-    eta = route_paths[0].get("time")
+    eta = route_paths[0].get("time") # Aqui fica o tempo estimado segundo a documentação
     if eta is None:
         raise Exception("Erro no cálculo do ETA: propriedade 'time' ausente na resposta")
 
-    # Temos que salvas as ultimas coordenadas do caminhões
+    # Temos que salvar as últimas coordenadas dos caminhões
     if truck_data.truck_id not in trucks:
         trucks[truck_data.truck_id] = []
     trucks[truck_data.truck_id].append((truck_data.latitude, truck_data.longitude))
@@ -66,6 +65,7 @@ async def process(truck_data: TruckData):
             f'<trkpt lat="{lat}" lon="{lon}"></trkpt>\n' for lat, lon in coords
         )
 
+        # Envia as coordenadas para o GraphHopper em um formato GPX, conforme documentação
         match_resp = requests.post(
             "http://localhost:8989/match",
             data=(
@@ -90,7 +90,7 @@ async def process(truck_data: TruckData):
         if not match_paths:
             raise Exception("Erro no Map Matching: nenhuma rota retornada")
 
-        instructions = match_paths[0].get("instructions")
+        instructions = match_paths[0].get("instructions") # Fica aqui a rua
         if not instructions:
             raise Exception("Erro no Map Matching: nenhuma instrução retornada")
 
