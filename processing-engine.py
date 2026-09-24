@@ -56,9 +56,9 @@ async def process(truck_data: TruckData):
     # Agora realizamos o Map Matching a cada 3 posições acumuladas
     coords = trucks[truck_data.truck_id]
 
-    if len(coords) == 3:
+    if len(coords) == 5:
         # Limpa já aqui: se o match falhar, não fica preso pra sempre nessas
-        # 3 posições, e o próximo ciclo começa a acumular do zero
+        # 5 posições, e o próximo ciclo começa a acumular do zero
         trucks[truck_data.truck_id] = []
 
         gpx_points = "".join(

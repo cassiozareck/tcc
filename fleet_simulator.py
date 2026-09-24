@@ -1,7 +1,7 @@
 """
-Protótipo de simulação de frota: caminhões saindo de cidades do RS com
-destino a municípios do PR, enviando posições pro processing-engine (que já
-calcula o ETA e roda o map matching sozinho).
+Protótipo de simulação de frota: caminhões saindo e chegando em cidades do
+RS, PR e SC (origem/destino sorteados entre si), enviando posições pro
+processing-engine (que já calcula o ETA e roda o map matching sozinho).
 """
 
 import asyncio
@@ -13,13 +13,14 @@ import requests
 
 PROCESS_ENGINE_URL = "http://localhost:8000/process"
 
-NUM_TRUCKS = 2              # quantos caminhões simular (usa os N primeiros pares origem/destino)
-SEND_INTERVAL_SECONDS = 5   # intervalo entre envios de cada caminhão
-STEPS = 2                  # quantas posições cada caminhão manda
-STEP_SIZE = 0.001           # avanço em graus por passo (~100m), rumo ao destino
+NUM_TRUCKS = 90              # quantos caminhões simular (usa os N primeiros pares origem/destino)
+SEND_INTERVAL_SECONDS = 10   # intervalo entre envios de cada caminhão
+STEPS = 3                    # quantas posições cada caminhão manda
+STEP_SIZE = 0.001            # avanço em graus por passo (~100m), rumo ao destino
 
-# Cidades de origem no RS (nome, lat, lon)
-ORIGENS = [
+# Cidades do RS, PR e SC (nome, lat, lon) usadas para sortear origem/destino
+CIDADES = [
+    # RS
     ("Porto Alegre", -30.0346, -51.2177),
     ("Caxias do Sul", -29.1634, -51.1797),
     ("Canoas", -29.9177, -51.1830),
@@ -30,10 +31,7 @@ ORIGENS = [
     ("Passo Fundo", -28.2628, -52.4067),
     ("Bagé", -31.3313, -54.1069),
     ("Uruguaiana", -29.7547, -57.0883),
-]
-
-# Municípios de destino no PR (nome, lat, lon)
-DESTINOS = [
+    # PR
     ("Curitiba", -25.4284, -49.2733),
     ("Londrina", -23.3103, -51.1628),
     ("Maringá", -23.4205, -51.9333),
@@ -44,6 +42,17 @@ DESTINOS = [
     ("Paranaguá", -25.5161, -48.5225),
     ("Umuarama", -23.7663, -53.3155),
     ("Toledo", -24.7246, -53.7412),
+    # SC
+    ("Florianópolis", -27.5954, -48.5480),
+    ("Joinville", -26.3044, -48.8487),
+    ("Blumenau", -26.9194, -49.0661),
+    ("Chapecó", -27.1000, -52.6152),
+    ("Criciúma", -28.6775, -49.3697),
+    ("Itajaí", -26.9078, -48.6619),
+    ("Lages", -27.8167, -50.3264),
+    ("Balneário Camboriú", -26.9906, -48.6349),
+    ("São José", -27.5969, -48.6394),
+    ("Jaraguá do Sul", -26.4863, -49.0672),
 ]
 
 
@@ -86,12 +95,12 @@ async def run_truck(truck_id, origin, dest, start_delay):
 
 
 async def main():
-    print(f"Tempo esperado para finalizar: ~{SEND_INTERVAL_SECONDS * STEPS} - {SEND_INTERVAL_SECONDS * STEPS + 5}s")
+    print(f"Tempo esperado para finalizar: ~{SEND_INTERVAL_SECONDS * STEPS} - {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
 
-    # sorteia origem/destino por caminhão (permite NUM_TRUCKS > 10)
-    pairs = [(random.choice(ORIGENS), random.choice(DESTINOS)) for _ in range(NUM_TRUCKS)]
+    # sorteia origem/destino por caminhão, sem repetir cidade dentro do par
+    pairs = [tuple(random.sample(CIDADES, 2)) for _ in range(NUM_TRUCKS)]
 
-    # para cada caminhao aloca a função run truck para rodar em background, iniciando em intervalos
+    # para cada caminhão aloca a função run truck para rodar em background, iniciando em intervalos
     # distintos para simular a frota mais realísticamente
     tasks = [
         run_truck(truck_id, origin, dest, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS))
