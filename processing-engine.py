@@ -16,6 +16,12 @@ trucks = {} # Guarda últimas 3 coordenadas dos caminhões
 
 calls = 0
 
+# Endpoint para limpar o estado acumulado (usado entre rodadas de teste)
+@app.post("/reset")
+async def reset():
+    trucks.clear()
+    return {"status": "ok"}
+
 # Endpoint para processamento de uma coordenada unitária
 @app.post("/process")
 async def process(truck_data: TruckData):

@@ -12,11 +12,12 @@ import time
 import requests
 
 PROCESS_ENGINE_URL = "http://localhost:8000/process"
+PROCESS_ENGINE_RESET_URL = "http://localhost:8000/reset"
 
-NUM_TRUCKS = 90              # quantos caminhões simular (usa os N primeiros pares origem/destino)
-SEND_INTERVAL_SECONDS = 10   # intervalo entre envios de cada caminhão
-STEPS = 3                    # quantas posições cada caminhão manda
-STEP_SIZE = 0.001            # avanço em graus por passo (~100m), rumo ao destino
+FLEET_SIZES = [20, 40, 60, 80, 100, 150, 200]     # vetor com as quantidades de caminhões testadas, uma rodada por valor
+SEND_INTERVAL_SECONDS = 10                        # intervalo entre envios de cada caminhão
+STEPS = 3                               # quantas posições cada caminhão manda
+STEP_SIZE = 0.001                       # avanço em graus por passo (~100m), rumo ao destino
 
 # Cidades do RS, PR e SC (nome, lat, lon) usadas para sortear origem/destino
 CIDADES = [
@@ -94,11 +95,18 @@ async def run_truck(truck_id, origin, dest, start_delay):
     print(f"{label} chegou")
 
 
-async def main():
-    print(f"Tempo esperado para finalizar: ~{SEND_INTERVAL_SECONDS * STEPS} - {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
+async def run_test(num_trucks):
+    """Roda uma rodada de simulação com num_trucks caminhões e devolve as métricas coletadas."""
+    sent_tasks.clear()  # descarta tarefas de envio da rodada anterior
+
+    # zera o estado acumulado do processing-engine pra não misturar localização com a rodada anterior
+    await asyncio.to_thread(requests.post, PROCESS_ENGINE_RESET_URL)
+
+    print(f"\n=== Rodada com {num_trucks} caminhões ===")
+    print(f"Tempo máximo de processamento: {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
 
     # sorteia origem/destino por caminhão, sem repetir cidade dentro do par
-    pairs = [tuple(random.sample(CIDADES, 2)) for _ in range(NUM_TRUCKS)]
+    pairs = [tuple(random.sample(CIDADES, 2)) for _ in range(num_trucks)]
 
     # para cada caminhão aloca a função run truck para rodar em background, iniciando em intervalos
     # distintos para simular a frota mais realísticamente
@@ -113,8 +121,19 @@ async def main():
     print(f"\nTodos os caminhões terminaram de enviar, aguardando o processing-engine responder tudo...")
     results = await asyncio.gather(*sent_tasks, return_exceptions=True)
     ok = sum(1 for r in results if not isinstance(r, Exception) and r.status_code == 200)
+    elapsed = time.perf_counter() - start
     print(f"{ok}/{len(results)} requisições respondidas com sucesso")
-    print(f"Tempo total até a última resposta do processing-engine: {time.perf_counter() - start:.2f}s")
+    print(f"Tempo total até a última resposta do processing-engine: {elapsed:.2f}s")
+
+    return {"num_trucks": num_trucks, "ok": ok, "total": len(results), "elapsed": elapsed}
+
+
+async def main():
+    summary = [await run_test(num_trucks) for num_trucks in FLEET_SIZES]
+
+    print("\n=== Resumo ===")
+    for r in summary:
+        print(f"{r['num_trucks']} caminhões -> {r['elapsed']:.2f}s ({r['ok']}/{r['total']} ok)")
 
 
 if __name__ == "__main__":
