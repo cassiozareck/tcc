@@ -1,0 +1,32 @@
+services:
+  graphhopper:
+    image: israelhikingmap/graphhopper:latest
+    container_name: graphhopper
+    restart: unless-stopped
+    command: ["--config", "/data/config.yml"]
+    ports:
+      - "8989:8989"
+    volumes:
+      - ./graph-hopper:/data
+    environment:
+      - JAVA_OPTS=-Xmx10g -Xms10g  # Xms = Xmx evita redimensionamento de heap em runtime; deixa ~2GB de folga sob o limite do container
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 12000M
+        reservations:
+          cpus: '4.0'
+          memory: 6000M
+
+  processing-engine:
+    build: .
+    container_name: processing-engine
+    restart: unless-stopped
+    depends_on:
+      graphhopper:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - GRAPHHOPPER_URL=http://graphhopper:8989

@@ -14,10 +14,10 @@ import requests
 PROCESS_ENGINE_URL = "http://localhost:8000/process"
 PROCESS_ENGINE_RESET_URL = "http://localhost:8000/reset"
 
-FLEET_SIZES = [20, 40, 60, 80, 100, 150, 200]     # vetor com as quantidades de caminhões testadas, uma rodada por valor
-SEND_INTERVAL_SECONDS = 10                        # intervalo entre envios de cada caminhão
-STEPS = 3                               # quantas posições cada caminhão manda
-STEP_SIZE = 0.001                       # avanço em graus por passo (~100m), rumo ao destino
+FLEET_SIZES = [50, 75, 100, 125, 150, 200, 250]     # vetor com as quantidades de caminhões testadas, uma rodada por valor
+SEND_INTERVAL_SECONDS = 10                          # intervalo entre envios de cada caminhão
+STEPS = 6                                           # quantas posições cada caminhão manda
+STEP_SIZE = 0.001                                   # avanço em graus por passo (~100m), rumo ao destino
 
 # Cidades do RS, PR e SC (nome, lat, lon) usadas para sortear origem/destino
 CIDADES = [

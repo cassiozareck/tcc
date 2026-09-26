@@ -1,6 +1,10 @@
+import os
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
+
+GRAPHHOPPER_URL = os.environ.get("GRAPHHOPPER_URL", "http://localhost:8989")
 
 # Estrutura de mensagem recebida da frota
 class TruckData(BaseModel):
@@ -18,13 +22,13 @@ calls = 0
 
 # Endpoint para limpar o estado acumulado (usado entre rodadas de teste)
 @app.post("/reset")
-async def reset():
+def reset():
     trucks.clear()
     return {"status": "ok"}
 
 # Endpoint para processamento de uma coordenada unitária
 @app.post("/process")
-async def process(truck_data: TruckData):
+def process(truck_data: TruckData):
     global calls
     calls += 1
     print(f"Chamadas: {calls}")
@@ -39,7 +43,7 @@ async def process(truck_data: TruckData):
         ]
     }
 
-    resp = requests.get(f"http://localhost:8989/route", params=route_params) # Envia para GraphHopper
+    resp = requests.get(f"{GRAPHHOPPER_URL}/route", params=route_params) # Envia para GraphHopper
 
     if resp.status_code != 200:
         raise Exception(f"Erro no cálculo do ETA: {resp.text}")
@@ -73,7 +77,7 @@ async def process(truck_data: TruckData):
 
         # Envia as coordenadas para o GraphHopper em um formato GPX, conforme documentação
         match_resp = requests.post(
-            "http://localhost:8989/match",
+            f"{GRAPHHOPPER_URL}/match",
             data=(
                 '<?xml version="1.0" encoding="UTF-8"?>\n'
                 "<gpx>\n<trk>\n<trkseg>\n"
