@@ -9,7 +9,7 @@ services:
     volumes:
       - ./graph-hopper:/data
     environment:
-      - JAVA_OPTS=-Xmx6g -Xms6g  # Xms = Xmx evita redimensionamento de heap em runtime; deixa ~2GB de folga sob o limite do container
+      - JAVA_OPTS=-Xmx10g -Xms10g  # Xms = Xmx evita redimensionamento de heap em runtime; deixa ~2GB de folga sob o limite do container
 
     deploy:
       resources:
@@ -18,7 +18,7 @@ services:
           memory: 12000M
         reservations:
           cpus: '8.0'
-          memory: 6000M
+          memory: 12000M
 
   processing-engine:
     build: .
