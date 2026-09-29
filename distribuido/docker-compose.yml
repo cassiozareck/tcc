@@ -1,6 +1,50 @@
 services:
-  processing-engine:
-    build: .
-    restart: unless-stopped
+  kafka:
+    image: apache/kafka:latest
     ports:
-      - "8080:8000"
+      - "9094:9094"  # acesso de fora do Docker (localhost:9094)
+    environment:
+      # Modo KRaft: o próprio broker também é controller, sem Zookeeper
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093  # id@host:porta dos controllers
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # Portas em que o broker escuta:
+      #   INTERNAL   (9092) -> containers da rede do compose
+      #   EXTERNAL   (9094) -> máquina host
+      #   CONTROLLER (9093) -> tráfego interno do KRaft
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+      # Endereço que o broker informa aos clientes para reconectarem
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # Partições de cada tópico criado automaticamente (ex.: truck-data)
+      KAFKA_NUM_PARTITIONS: 5
+      # Um único broker: só é possível 1 réplica dos tópicos internos
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  consumer:
+    build: ./consumer
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    deploy:
+      replicas: 5  # uma instância por partição; acima de 5 ficam ociosas
+    # Opcionais, os valores abaixo já são os defaults do código
+    # environment:
+    #   KAFKA_BOOTSTRAP: kafka:9092  # endereço do broker
+    #   KAFKA_TOPIC: truck-data      # tópico consumido
+
+  # Simulador de frota (publica no Kafka). Não sobe com `up`; rodar com:
+  #   docker compose run --rm producer
+  producer:
+    build: ./producer
+    profiles: ["producer"]
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      FLEET_SIZES: 50,75,100,125,150,200,250  # caminhões por rodada (uma rodada por valor)
+      SEND_INTERVAL_SECONDS: 10               # intervalo entre envios de cada caminhão
