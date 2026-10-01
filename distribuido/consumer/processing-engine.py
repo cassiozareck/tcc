@@ -26,6 +26,8 @@ consumer = Consumer({
     'group.id': 'processing-engine',
     # Sem offset salvo para o grupo, começa do início do tópico (não perde mensagens antigas)
     'auto.offset.reset': 'earliest',
+    # Commit do offset a cada 500ms (default 5s): o lag medido de fora erra no máximo ~5 mensagens por partição
+    'auto.commit.interval.ms': 500,
 })
 consumer.subscribe([os.getenv('KAFKA_TOPIC', 'truck-data')])
 

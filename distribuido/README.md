@@ -37,6 +37,16 @@ echo '{"truck_id":1,"latitude":-23.55,"longitude":-46.63,"dest_lat":-22.9,"dest_
 
 Ver o processamento: `docker compose logs -f consumer`
 
+## Ver o consumer lag
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 --describe --group processing-engine
+```
+
+`LAG` 0 em todas as partições significa que tudo o que foi publicado já foi consumido.
+A soma de `LOG-END-OFFSET` deve bater com o total de mensagens confirmadas que o producer imprime.
+
 De fora do Docker, o broker está em `localhost:9094`.
 
 Parar: `docker compose down`
@@ -58,8 +68,9 @@ Parar: `docker compose down`
 | `KAFKA_TOPIC` | `truck-data` | tópico consumido |
 
 **`producer`**: `KAFKA_BOOTSTRAP` (default `localhost:9094`, no compose `kafka:9092`),
-`KAFKA_TOPIC`, `FLEET_SIZES` (caminhões por rodada, separados por vírgula) e
-`SEND_INTERVAL_SECONDS` (intervalo entre envios de cada caminhão).
+`KAFKA_TOPIC`, `FLEET_SIZES` (caminhões por rodada, separados por vírgula),
+`SEND_INTERVAL_SECONDS` (intervalo entre envios de cada caminhão) e
+`SENDS_PER_TRUCK` (mensagens/steps que cada caminhão envia por rodada, default 6).
 
 **`kafka`**: modo KRaft (sem Zookeeper). As principais são `KAFKA_NUM_PARTITIONS`
 (partições dos tópicos criados automaticamente) e `KAFKA_LISTENERS` /

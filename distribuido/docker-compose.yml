@@ -48,3 +48,4 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       FLEET_SIZES: 50,75,100,125,150,200,250  # caminhões por rodada (uma rodada por valor)
       SEND_INTERVAL_SECONDS: 10               # intervalo entre envios de cada caminhão
+      SENDS_PER_TRUCK: 6                      # mensagens (steps) que cada caminhão envia por rodada
