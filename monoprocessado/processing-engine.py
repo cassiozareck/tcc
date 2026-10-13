@@ -122,8 +122,6 @@ def process(truck_data: TruckData):
             raise Exception("Erro no Map Matching: nenhuma instrução com 'street_name' preenchido")
         street_name = street_names[-1]
     eta_legivel = format_eta(eta)
-    rua = street_name or "—"
-    print(f"🚚 Caminhão {truck_data.truck_id:<4} │ 🕒 ETA {eta_legivel:<12} │ 📍 {rua}")
 
     return {
         "truck_id": truck_data.truck_id,

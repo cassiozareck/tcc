@@ -57,7 +57,18 @@ CIDADES = [
 ]
 
 
+# Tabela de chegadas: colunas com largura fixa (maior rota possível: "Balneário Camboriú -> Foz do Iguaçu")
+# Os emojis ocupam 2 colunas no terminal, mas o format() conta 1: por isso cada célula começa com o
+# emoji fixo da coluna e só o texto depois dele é preenchido, mantendo o alinhamento.
+TABLE_ROW = "🚚 {:>4} │ 🧭 {:<38} │ 🕒 {:<13} │ 📍 {}"
+TABLE_HEADER = TABLE_ROW.format("ID", "Rota", "ETA", "Rua") + "\n" + "─" * 8 + "┼" + "─" * 43 + "┼" + "─" * 18 + "┼" + "─" * 32
+
 sent_tasks = []  # tarefas de envio disparadas, guardadas pra sabermos quando o processing-engine responder tudo
+
+
+def send_position(payload):
+    """Envia a posição ao processing-engine e devolve a resposta."""
+    return requests.post(PROCESS_ENGINE_URL, json=payload)
 
 
 async def run_truck(truck_id, origin, dest, start_delay):
@@ -73,7 +84,8 @@ async def run_truck(truck_id, origin, dest, start_delay):
     step_lat = (lat_d - lat) / dist * STEP_SIZE
     step_lon = (lon_d - lon) / dist * STEP_SIZE
 
-     # envia localização STEPS vezes
+    truck_tasks = []  # envios deste caminhão, pra ler o retorno quando ele chegar
+    # envia localização STEPS vezes
     for step in range(1, STEPS + 1):
         lat += step_lat
         lon += step_lon
@@ -87,12 +99,23 @@ async def run_truck(truck_id, origin, dest, start_delay):
         }
 
         # dispara e segue o ciclo sem esperar a resposta, como um rastreador real faria
-        sent_tasks.append(asyncio.create_task(asyncio.to_thread(requests.post, PROCESS_ENGINE_URL, json=payload)))
+        task = asyncio.create_task(asyncio.to_thread(send_position, payload))
         print(f"{label} enviado")
+        sent_tasks.append(task)
+        truck_tasks.append(task)
 
         await asyncio.sleep(SEND_INTERVAL_SECONDS)
 
-    print(f"{label} chegou")
+    # na chegada, imprime só o último retorno que veio com rua (ela só vem a cada 5 posições)
+    results = await asyncio.gather(*truck_tasks, return_exceptions=True)
+    responses = [r.json() for r in results if not isinstance(r, Exception) and r.status_code == 200]
+    last = next((d for d in reversed(responses) if d.get("street_name")), None)
+    rota = f"{origin[0]} -> {dest[0]}"
+    print(TABLE_HEADER)
+    if last:
+        print(TABLE_ROW.format(truck_id, rota, last.get("eta_formatted", last["eta"]), last["street_name"]))
+    else:
+        print(TABLE_ROW.format(truck_id, rota, "—", "sem retorno com rua"))
 
 
 async def run_test(num_trucks):
@@ -103,8 +126,8 @@ async def run_test(num_trucks):
     await asyncio.to_thread(requests.post, PROCESS_ENGINE_RESET_URL)
 
     print(f"\n=== Rodada com {num_trucks} caminhões ===")
-    print(f"Tempo máximo permitido até o último retorno do serviço de processamento: {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
-
+    print(f"Tempo máximo permitido até o último retorno do serviço de processamento: {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s\n")
+    
     # sorteia origem/destino por caminhão, sem repetir cidade dentro do par
     pairs = [tuple(random.sample(CIDADES, 2)) for _ in range(num_trucks)]
 
