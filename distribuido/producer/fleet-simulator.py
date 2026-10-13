@@ -48,12 +48,26 @@ def on_delivery(err, msg):
 
 
 def get_consumer_lag():
-    """Devolve {partição: lag} do grupo dos consumers: fim do log menos o offset já commitado."""
+    """Devolve {partição: lag} do grupo KAFKA_GROUP no instante da chamada.
+
+    Lag = quantas mensagens estão no tópico e os consumers ainda não confirmaram (commit):
+
+        lag = fim do log (high watermark) - offset commitado pelo grupo
+
+    É o mesmo número que `kafka-consumer-groups.sh --describe` mostra na coluna LAG.
+
+    Limitação: o offset commitado atrasa em relação ao que o consumer já processou,
+    até `auto.commit.interval.ms` (500ms no consumer, ~5 mensagens por partição).
+    O lag medido é, portanto, um pouco maior ou igual ao real, nunca menor.
+    """
+    # Descobre as partições do tópico (o broker é quem sabe quantas existem)
     partitions = lag_reader.list_topics(KAFKA_TOPIC, timeout=10).topics[KAFKA_TOPIC].partitions
+    # Até onde o grupo já confirmou, por partição (devolve o TopicPartition com .offset preenchido)
     committed = lag_reader.committed([TopicPartition(KAFKA_TOPIC, p) for p in partitions], timeout=10)
 
     lags = {}
     for tp in sorted(committed, key=lambda t: t.partition):
+        # low = primeiro offset ainda existente no log; high = próximo offset a ser escrito
         low, high = lag_reader.get_watermark_offsets(tp, timeout=10)
         # offset negativo = grupo ainda sem commit nessa partição: tudo o que está no log é lag
         lags[tp.partition] = high - (tp.offset if tp.offset >= 0 else low)

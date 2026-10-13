@@ -1,48 +1,41 @@
 # TCC — Engine de rastreamento de caminhões
 
 API em FastAPI (`processing-engine.py`) que calcula o ETA de um caminhão até o
-destino e, a cada 3 posições recebidas, roda Map Matching no GraphHopper para
+destino e, a cada 5 posições recebidas, roda Map Matching no GraphHopper para
 descobrir em qual rua o caminhão está.
 
 ## Como rodar
 
-### 1. Subir o GraphHopper (mapa do Sul)
+### 1. Subir os serviços
 
-Já existe um container chamado `graphhopper` com o grafo pré-processado em
-`graph-hopper`. Basta iniciar:
-
-```bash
-docker start graphhopper
-```
-
-Se o container não existir (primeira vez), crie assim:
+O GraphHopper (mapa do Sul) e o `processing-engine` sobem juntos pelo Docker
+Compose:
 
 ```bash
-docker run -d --name graphhopper -p 8989:8989 \
-  -v /home/cassio/src/tcc/graph-hopper:/data \
-  israelhikingmap/graphhopper:latest --config /data/config.yml
-```
-
-### 2. Subir a API
-
-```bash
-cd /home/cassio/src/tcc
-.venv/bin/uvicorn processing-engine:app --port 8000
+docker compose up -d
 ```
 
 A API sobe em `http://localhost:8000` e expõe o endpoint `POST /process`.
 
+Se o container `graphhopper` não existir, crie manualmente:
+
+```bash
+docker run -d --name graphhopper -p 8989:8989 \
+  -v $(pwd)/graph-hopper:/data \
+  israelhikingmap/graphhopper:latest --config /data/config.yml
+```
+
 ## Testando com curl
 
-O map matching só roda a partir da 3ª posição recebida para o mesmo
-`truck_id` (janela deslizante das últimas 3 posições). Use o mesmo
-`truck_id` nas 3 chamadas para ver o `street_name` sair preenchido na
-terceira.
+O map matching roda a cada 5 posições recebidas para o mesmo `truck_id`
+(as posições acumulam e a lista zera depois do match). Use o mesmo
+`truck_id` nas 5 chamadas para ver o `street_name` sair preenchido na
+quinta.
 
 Exemplo: caminhão saindo de Porto Alegre com destino Curitiba.
 
 ```bash
-curl -s -X POST http://localhost:8000/process \ 
+curl -s -X POST http://localhost:8000/process \
   -H "Content-Type: application/json" \
   -d '{"truck_id": 7, "latitude": -30.0346, "longitude": -51.2177, "dest_lat": -25.4284, "dest_long": -49.2733}'
 
@@ -53,42 +46,41 @@ curl -s -X POST http://localhost:8000/process \
 curl -s -X POST http://localhost:8000/process \
   -H "Content-Type: application/json" \
   -d '{"truck_id": 7, "latitude": -30.0400, "longitude": -51.2200, "dest_lat": -25.4284, "dest_long": -49.2733}'
+
+curl -s -X POST http://localhost:8000/process \
+  -H "Content-Type: application/json" \
+  -d '{"truck_id": 7, "latitude": -30.0430, "longitude": -51.2220, "dest_lat": -25.4284, "dest_long": -49.2733}'
+
+curl -s -X POST http://localhost:8000/process \
+  -H "Content-Type: application/json" \
+  -d '{"truck_id": 7, "latitude": -30.0460, "longitude": -51.2240, "dest_lat": -25.4284, "dest_long": -49.2733}'
 ```
 
-Resposta esperada (1ª e 2ª chamadas com `street_name` nulo, 3ª preenchido):
+Resposta esperada (1ª a 4ª chamadas com `street_name` nulo, 5ª preenchido):
                         
 ```json
 {"truck_id":7,"eta":29928221,"street_name":null}
 {"truck_id":7,"eta":29939501,"street_name":null}
-{"truck_id":7,"eta":29983850,"street_name":"Rua Alberto Torres"}
+{"truck_id":7,"eta":29983850,"street_name":null}
+{"truck_id":7,"eta":29995000,"street_name":null}
+{"truck_id":7,"eta":30010000,"street_name":"Rua Alberto Torres"}
 ```
-
-Use um `truck_id` diferente para reiniciar o histórico de posições do zero
-(ele fica em memória, dentro do processo da API).
 
 ## Rodando o simulador de frota
 
-Com o GraphHopper e a API já no ar (passos 1 e 2 acima), o `fleet-simulator.py`
-simula caminhões saindo de cidades do RS com destino a municípios do PR,
-enviando posições reais para o `processing-engine` a cada `SEND_INTERVAL_SECONDS`
-segundos:
+Para rodar o simulador de frotas:
 
 ```bash
-cd /home/cassio/src/tcc
 .venv/bin/python fleet-simulator.py
 ```
 
 Ajuste no topo do arquivo:
 - `NUM_TRUCKS` — quantos caminhões simular (usa os N primeiros pares origem/destino).
 - `SEND_INTERVAL_SECONDS` — intervalo entre envios de cada caminhão.
-- `STEPS` — quantas posições cada caminhão manda antes de "chegar".
+- `STEPS` — quantas posições cada caminhão irá mandar
 
 ## Como matar os processos
 
 ```bash
-# API (uvicorn)
-pkill -f "uvicorn processing-engine"
-
-# GraphHopper
-docker stop graphhopper
+docker compose down
 ```

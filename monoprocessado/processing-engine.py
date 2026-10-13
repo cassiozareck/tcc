@@ -16,9 +16,20 @@ class TruckData(BaseModel):
 
 app = FastAPI()
 
-trucks = {} # Guarda últimas 3 coordenadas dos caminhões
+trucks = {} # Guarda as coordenadas acumuladas (até 5) dos caminhões
 
 calls = 0
+
+# Converte o tempo do GraphHopper (milissegundos) para algo legível, ex: "1h 23min 05s"
+def format_eta(ms):
+    total_seconds = round(ms / 1000)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}min {seconds:02d}s"
+    if minutes:
+        return f"{minutes}min {seconds:02d}s"
+    return f"{seconds}s"
 
 # Endpoint para limpar o estado acumulado (usado entre rodadas de teste)
 @app.post("/reset")
@@ -63,7 +74,7 @@ def process(truck_data: TruckData):
 
     street_name = None
 
-    # Agora realizamos o Map Matching a cada 3 posições acumuladas
+    # Agora realizamos o Map Matching a cada 5 posições acumuladas
     coords = trucks[truck_data.truck_id]
 
     if len(coords) == 5:
@@ -110,9 +121,13 @@ def process(truck_data: TruckData):
         if not street_names:
             raise Exception("Erro no Map Matching: nenhuma instrução com 'street_name' preenchido")
         street_name = street_names[-1]
+    eta_legivel = format_eta(eta)
+    rua = street_name or "—"
+    print(f"🚚 Caminhão {truck_data.truck_id:<4} │ 🕒 ETA {eta_legivel:<12} │ 📍 {rua}")
 
     return {
         "truck_id": truck_data.truck_id,
         "eta": eta,
+        "eta_formatted": eta_legivel,
         "street_name": street_name,
     }

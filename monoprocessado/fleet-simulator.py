@@ -103,7 +103,7 @@ async def run_test(num_trucks):
     await asyncio.to_thread(requests.post, PROCESS_ENGINE_RESET_URL)
 
     print(f"\n=== Rodada com {num_trucks} caminhões ===")
-    print(f"Tempo máximo de processamento: {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
+    print(f"Tempo máximo permitido até o último retorno do serviço de processamento: {SEND_INTERVAL_SECONDS * STEPS + SEND_INTERVAL_SECONDS}s")
 
     # sorteia origem/destino por caminhão, sem repetir cidade dentro do par
     pairs = [tuple(random.sample(CIDADES, 2)) for _ in range(num_trucks)]
