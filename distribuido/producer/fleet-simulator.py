@@ -1,7 +1,6 @@
 """
 Simulador de frota (versão Kafka): cada caminhão publica posições no tópico
-consumido pelo consumer. As coordenadas são sorteadas e não representam rotas
-reais, já que o processamento é emulado.
+consumido pelo consumer. As coordenadas são sorteadas e o processamento é emulado.
 """
 
 import asyncio
@@ -15,11 +14,12 @@ from confluent_kafka import Consumer, Producer, TopicPartition
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9094")  # 9094 = listener do host; dentro do compose usa kafka:9092
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "truck-data")
 KAFKA_GROUP = os.getenv("KAFKA_GROUP", "processing-engine")  # grupo dos consumers, usado só para ler o lag
-
+        
 # vetor com as quantidades de caminhões testadas, uma rodada por valor
-FLEET_SIZES = [int(n) for n in os.getenv("FLEET_SIZES", "50,75,100,125,150,200,250").split(",")]
+FLEET_SIZES = [int(n) for n in os.getenv("FLEET_SIZES", "100,200").split(",")]
 SEND_INTERVAL_SECONDS = float(os.getenv("SEND_INTERVAL_SECONDS", "10"))  # intervalo entre envios de cada caminhão
 SENDS_PER_TRUCK = int(os.getenv("SENDS_PER_TRUCK", "6"))  # quantas mensagens (steps) cada caminhão manda
+REPORT_INTERVAL_SECONDS = float(os.getenv("REPORT_INTERVAL_SECONDS", "5"))  # intervalo do print de progresso
 
 # Região (RS, PR e SC) onde as coordenadas são sorteadas
 LAT_RANGE = (-33.0, -22.5)
@@ -27,13 +27,15 @@ LON_RANGE = (-58.0, -48.0)
 
 producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP})
 
-# Só consulta offsets: não faz subscribe, então não entra no grupo nem rouba partições dos consumers
+# Só consulta offsets: não faz subscribe, então não entra no grupo nem rouba partições dos consumers,
+# para consulta do consumer lag
 lag_reader = Consumer({
     "bootstrap.servers": KAFKA_BOOTSTRAP,
     "group.id": KAFKA_GROUP,
     "enable.auto.commit": False,
 })
 
+sent = 0       # mensagens publicadas na rodada atual
 delivered = 0  # mensagens confirmadas pelo broker na rodada atual
 failed = 0     # mensagens que o broker não confirmou
 
@@ -74,8 +76,16 @@ def get_consumer_lag():
     return lags
 
 
+async def report_progress():
+    """Em paralelo aos caminhões, imprime a cada REPORT_INTERVAL_SECONDS as coordenadas enviadas e o lag total."""
+    while True:
+        await asyncio.sleep(REPORT_INTERVAL_SECONDS)
+        print(f"[{sent} enviadas] lag total: {sum(get_consumer_lag().values())}")
+
+
 async def run_truck(truck_id, start_delay):
     """Publica SENDS_PER_TRUCK posições sem esperar a confirmação de cada uma."""
+    global sent
     await asyncio.sleep(start_delay)  # evita todos iniciarem ao mesmo instante
 
     for _ in range(SENDS_PER_TRUCK):
@@ -92,23 +102,29 @@ async def run_truck(truck_id, start_delay):
         producer.produce(KAFKA_TOPIC, key=str(truck_id), value=json.dumps(payload), on_delivery=on_delivery)
         producer.poll(0)  # atende os callbacks de confirmação pendentes
 
+        sent += 1
+
         await asyncio.sleep(SEND_INTERVAL_SECONDS)
 
 
 async def run_test(num_trucks):
     """Roda uma rodada de simulação com num_trucks caminhões e devolve as métricas coletadas."""
-    global delivered, failed
-    delivered = failed = 0
+    global sent, delivered, failed
+    sent = delivered = failed = 0
 
     print(f"\n=== Rodada com {num_trucks} caminhões ===")
+    while sum(get_consumer_lag().values()) > 0:  # espera o backlog da rodada anterior acabar
+        time.sleep(1)
 
     tasks = [
         run_truck(truck_id, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS))
         for truck_id in range(1, num_trucks + 1)
     ]
 
-    start = time.perf_counter()
+    start = time.perf_counter() # timer inicial de contagem para relatório do tempo levado
+    reporter = asyncio.create_task(report_progress()) # thread separa que conta quantas mensagens enviadas
     await asyncio.gather(*tasks)  # espera terminar o envio para medir métricas
+    reporter.cancel()
 
     print("Todos os caminhões terminaram de enviar, aguardando o Kafka confirmar tudo...")
     await asyncio.to_thread(producer.flush)  # bloqueia até todas as mensagens serem confirmadas
@@ -118,12 +134,14 @@ async def run_test(num_trucks):
     print(f"Tempo total até a última confirmação: {elapsed:.2f}s")
 
     # Backlog dos consumers no instante em que o envio terminou (o offset commitado atrasa até ~500ms)
-    lags = await asyncio.to_thread(get_consumer_lag)
+    lags = get_consumer_lag()
     max_lag = max(lags.values())
+    total_lag = sum(lags.values())
     print("Lag por partição: " + " ".join(f"p{p}={lag}" for p, lag in lags.items()))
     print(f"Lag máximo: {max_lag}")
+    print(f"Lag total: {total_lag}")
 
-    return {"num_trucks": num_trucks, "ok": delivered, "total": total, "elapsed": elapsed, "max_lag": max_lag}
+    return {"num_trucks": num_trucks, "ok": delivered, "total": total, "elapsed": elapsed, "max_lag": max_lag, "total_lag": total_lag}
 
 
 async def main():
@@ -131,7 +149,7 @@ async def main():
 
     print("\n=== Resumo ===")
     for r in summary:
-        print(f"{r['num_trucks']} caminhões -> {r['elapsed']:.2f}s ({r['ok']}/{r['total']} ok), lag máximo {r['max_lag']}")
+        print(f"{r['num_trucks']} caminhões -> {r['elapsed']:.2f}s ({r['ok']}/{r['total']} ok), lag máximo {r['max_lag']}, lag total {r['total_lag']}")
 
 
 if __name__ == "__main__":

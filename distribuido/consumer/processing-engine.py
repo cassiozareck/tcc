@@ -26,10 +26,12 @@ consumer = Consumer({
     'group.id': 'processing-engine',
     # Sem offset salvo para o grupo, começa do início do tópico (não perde mensagens antigas)
     'auto.offset.reset': 'earliest',
-    # Commit do offset a cada 500ms (default 5s): o lag medido de fora erra no máximo ~5 mensagens por partição
-    'auto.commit.interval.ms': 500,
+    # Commit do offset a cada 100ms (default 5s): o lag medido de fora erra no máximo ~5 mensagens por partição
+    'auto.commit.interval.ms': 100,
 })
 consumer.subscribe([os.getenv('KAFKA_TOPIC', 'truck-data')])
+
+processed = 0  # mensagens processadas por esta instância
 
 while True:
     # Espera até 1s por uma mensagem; None significa que nada chegou
@@ -43,4 +45,6 @@ while True:
     truck_data = TruckData.model_validate_json(msg.value())
     # Tempo médio do processamento emulado
     time.sleep(0.092)
-    print(f'Localização do caminhão {truck_data.truck_id} processada (partição {msg.partition()}).', flush=True)
+    processed += 1
+    if processed % 50 == 0:
+        print(f'{processed} coordenadas processadas (partição {msg.partition()}).', flush=True)
