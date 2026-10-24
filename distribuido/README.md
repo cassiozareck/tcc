@@ -1,7 +1,7 @@
 # Processing Engine — versão distribuída (Kafka)
 
-Um broker Kafka (KRaft) com o tópico `truck-data` em 5 partições, um consumidor
-que processa cada mensagem e um producer que simula a frota.
+Um broker Kafka (KRaft) com o tópico `truck-data` em X partições, consumidores
+que processam as mensagens (coordenadas) e um producer que simula a frota.
 
 ```
 distribuido/
@@ -17,6 +17,8 @@ cd distribuido
 docker compose down
 docker compose up --build
 ```
+
+Parar: `docker compose down`
 
 ## Simular a frota (producer)
 
@@ -40,11 +42,6 @@ docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 ```
 
 `LAG` 0 em todas as partições significa que tudo o que foi publicado já foi consumido.
-A soma de `LOG-END-OFFSET` deve bater com o total de mensagens confirmadas que o producer imprime.
-
-De fora do Docker, o broker está em `localhost:9094`.
-
-Parar: `docker compose down`
 
 ## Variáveis de ambiente
 
@@ -56,7 +53,8 @@ Parar: `docker compose down`
 | `KAFKA_TOPIC` | `truck-data` | tópico consumido |
 
 **`producer`**: `KAFKA_BOOTSTRAP` (default `localhost:9094`, no compose `kafka:9092`),
-`KAFKA_TOPIC`, `FLEET_SIZES` (caminhões por rodada, separados por vírgula),
+`KAFKA_TOPIC` (tópicos),
+`FLEET_SIZES` (caminhões por rodada, separados por vírgula),
 `SEND_INTERVAL_SECONDS` (intervalo entre envios de cada caminhão) e
 `SENDS_PER_TRUCK` (mensagens/steps que cada caminhão envia por rodada, default 6),
 `REPORT_INTERVAL_SECONDS` (intervalo do print de coordenadas enviadas e lag total, default 5).

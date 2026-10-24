@@ -4,10 +4,23 @@ services:
     ports:
       - "9094:9094"  # acesso de fora do Docker (localhost:9094)
     environment:
-      # Modo KRaft: o próprio broker também é controller, sem Zookeeper
+      # Modo KRaft (Kafka Raft): os metadados do cluster (tópicos, partições, líderes,
+      # configurações) ficam num log interno gerenciado pelos próprios nós do Kafka,
+      # via protocolo Raft. Antes isso exigia um Zookeeper separado.
+
+      # Identificador único deste nó no cluster. É o "1" usado no QUORUM_VOTERS abaixo
       KAFKA_NODE_ID: 1
+      # Papéis deste nó:
+      #   broker     -> recebe, guarda e entrega as mensagens dos tópicos
+      #   controller -> cuida dos metadados (cria tópicos, elege líder de partição)
+      # Aqui um único nó faz os dois. 
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093  # id@host:porta dos controllers
+      # Controllers com direito a voto no quórum Raft, no formato id@host:porta.
+      # 1@kafka:9093 = nó 1, acessível pelo nome do serviço (kafka) na porta 9093.
+      # Com um único votante o quórum é só ele: funciona, mas sem tolerância a falhas
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Qual listener (definido em KAFKA_LISTENERS) carrega o tráfego do controller.
+      # CONTROLLER é o listener da porta 9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
 
       # Portas em que o broker escuta:
@@ -17,7 +30,9 @@ services:
       KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
       # Endereço que o broker informa aos clientes para reconectarem
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      # Protocolo de cada listener (PLAINTEXT = sem criptografia nem autenticação, ok para teste local)
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      # Listener usado na comunicação entre brokers (sem uso real com um só broker, mas obrigatório)
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
 
       # Partições de cada tópico criado automaticamente (ex.: truck-data)
@@ -26,10 +41,10 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   consumer:
-    build: ./consumer
-    restart: unless-stopped
+    build: ./consumer # Localização do Dockerfile
+    restart: unless-stopped 
     depends_on:
-      - kafka
+      - kafka # Kafka precisa ter sido inicializado
     deploy:
       replicas: 5  # uma instância por partição; acima de 5 ficam ociosas
     # Opcionais, os valores abaixo já são os defaults do código
@@ -41,11 +56,11 @@ services:
   #   docker compose run --rm producer
   producer:
     build: ./producer
-    profiles: ["producer"]
+    profiles: ["producer"] # para não inciar junto com consumidor
     depends_on:
       - kafka
     environment:
-      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_BOOTSTRAP: kafka:9092 # porta para acesso do Kafka
       FLEET_SIZES: 200,400,600,800,1000       # caminhões por rodada (uma rodada por valor)
       SEND_INTERVAL_SECONDS: 10               # intervalo entre envios de cada caminhão
       SENDS_PER_TRUCK: 6                      # mensagens (steps) que cada caminhão envia por rodada
