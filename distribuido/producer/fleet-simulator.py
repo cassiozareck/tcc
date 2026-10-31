@@ -58,9 +58,10 @@ def get_consumer_lag():
 
     É o mesmo número que `kafka-consumer-groups.sh --describe` mostra na coluna LAG.
 
-    Limitação: o offset commitado atrasa em relação ao que o consumer já processou,
-    até `auto.commit.interval.ms` (500ms no consumer, ~5 mensagens por partição).
-    O lag medido é, portanto, um pouco maior ou igual ao real, nunca menor.
+    Limitação: o offset commitado não coincide exatamente com o que o consumer já processou.
+    O offset é marcado no poll(), antes do processamento (subestima até 1 mensagem por partição),
+    e o commit atrasa até `auto.commit.interval.ms` (100ms no consumer, ~1 mensagem de 92ms,
+    o que superestima). O erro do lag medido é, portanto, de no máximo ~1 mensagem por partição.
     """
     # Descobre as partições do tópico (o broker é quem sabe quantas existem)
     partitions = lag_reader.list_topics(KAFKA_TOPIC, timeout=10).topics[KAFKA_TOPIC].partitions
@@ -83,7 +84,7 @@ async def report_progress():
         print(f"[{sent} enviadas] lag total: {sum(get_consumer_lag().values())}")
 
 
-async def run_truck(truck_id, start_delay):
+async def run_truck(truck_id, start_delay, num_partitions):
     """Publica SENDS_PER_TRUCK posições sem esperar a confirmação de cada uma."""
     global sent
     await asyncio.sleep(start_delay)  # evita todos iniciarem ao mesmo instante
@@ -98,8 +99,15 @@ async def run_truck(truck_id, start_delay):
         }
 
         # publica e segue o ciclo sem esperar.
-        # A chave é o truck_id: todas as posições de um caminhão vão pra mesma partição, em ordem
-        producer.produce(KAFKA_TOPIC, key=str(truck_id), value=json.dumps(payload), on_delivery=on_delivery)
+        # Partição escolhida por truck_id % nº de partições (em vez do hash da chave, que desbalanceia):
+        # ids consecutivos se espalham por igual e cada caminhão continua sempre na mesma partição, em ordem
+        producer.produce(
+            KAFKA_TOPIC,
+            key=str(truck_id),
+            value=json.dumps(payload),
+            partition=truck_id % num_partitions,
+            on_delivery=on_delivery,
+        )
         producer.poll(0)  # atende os callbacks de confirmação pendentes
 
         sent += 1
@@ -116,8 +124,10 @@ async def run_test(num_trucks):
     while sum(get_consumer_lag().values()) > 0:  # espera o backlog da rodada anterior acabar
         time.sleep(1)
 
+    # Pega o numero de partições para distribuir uniformemente a carga entre as partições
+    num_partitions = len(lag_reader.list_topics(KAFKA_TOPIC, timeout=10).topics[KAFKA_TOPIC].partitions)
     tasks = [
-        run_truck(truck_id, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS))
+        run_truck(truck_id, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS), num_partitions=num_partitions)
         for truck_id in range(1, num_trucks + 1)
     ]
 

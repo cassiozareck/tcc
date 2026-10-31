@@ -36,7 +36,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
 
       # Partições de cada tópico criado automaticamente (ex.: truck-data)
-      KAFKA_NUM_PARTITIONS: 5
+      KAFKA_NUM_PARTITIONS: 10
       # Um único broker: só é possível 1 réplica dos tópicos internos
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
@@ -46,7 +46,7 @@ services:
     depends_on:
       - kafka # Kafka precisa ter sido inicializado
     deploy:
-      replicas: 5  # uma instância por partição; acima de 5 ficam ociosas
+      replicas: 10  # uma instância por partição; acima de 10 ficam ociosas
     # Opcionais, os valores abaixo já são os defaults do código
     # environment:
     #   KAFKA_BOOTSTRAP: kafka:9092  # endereço do broker
@@ -61,6 +61,6 @@ services:
       - kafka
     environment:
       KAFKA_BOOTSTRAP: kafka:9092 # porta para acesso do Kafka
-      FLEET_SIZES: 200,400,600,800,1000       # caminhões por rodada (uma rodada por valor)
+      FLEET_SIZES: 1000       # caminhões por rodada (uma rodada por valor)
       SEND_INTERVAL_SECONDS: 10               # intervalo entre envios de cada caminhão
-      SENDS_PER_TRUCK: 6                      # mensagens (steps) que cada caminhão envia por rodada
+      SENDS_PER_TRUCK: 30                      # mensagens (steps) que cada caminhão envia por rodada
