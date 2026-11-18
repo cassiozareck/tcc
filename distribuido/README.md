@@ -10,6 +10,19 @@ distribuido/
 └── producer/   # fleet-simulator.py: simula os caminhões e publica no tópico
 ```
 
+```
+                                         ┌──▶ consumer 1 ┐
+fleet-simulator.py ──▶ Kafka (tópico ────┼──▶ consumer 2 ├──▶ processamento
+   (producer)          truck-data)       │       ...     │
+                                         └──▶ consumer N ┘
+```
+
+Os consumers fazem parte do mesmo *consumer group* e dividem as partições entre
+si. O processamento é **emulado** com o tempo médio do processamento real da
+versão monoprocessada (~92 ms por posição), para isolar o efeito da
+arquitetura. A métrica principal é o **consumer lag** (quantas mensagens
+publicadas ainda não foram processadas).
+
 ## Como rodar
 
 ```bash

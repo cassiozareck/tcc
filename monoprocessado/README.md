@@ -4,6 +4,14 @@ API em FastAPI (`processing-engine.py`) que calcula o ETA de um caminhão até o
 destino e, a cada 5 posições recebidas, roda Map Matching no GraphHopper para
 descobrir em qual rua o caminhão está.
 
+```
+fleet-simulator.py ──HTTP POST /process──▶ processing-engine (FastAPI) ──▶ GraphHopper
+   (N caminhões)                                                           (mapa do Sul)
+```
+
+Cada caminhão faz uma requisição e espera a resposta. Todo o processamento
+acontece em um único processo, que vira o gargalo quando a frota aumenta.
+
 ## Como rodar
 
 ### 1. Subir os serviços

@@ -49,6 +49,17 @@ def on_delivery(err, msg):
         failed += 1
 
 
+def get_num_partitions():
+    """Número de partições do tópico. Se ele ainda não existe, a consulta feita pelo producer dispara a
+    criação automática (o consumer não faz isso) mas responde com 0 partições; por isso repete até o broker criá-lo."""
+    for _ in range(30):
+        partitions = producer.list_topics(KAFKA_TOPIC, timeout=10).topics[KAFKA_TOPIC].partitions
+        if partitions:
+            return len(partitions)
+        time.sleep(1)
+    raise RuntimeError(f"Tópico {KAFKA_TOPIC} sem partições após 30s")
+
+
 def get_consumer_lag():
     """Devolve {partição: lag} do grupo KAFKA_GROUP no instante da chamada.
 
@@ -125,7 +136,7 @@ async def run_test(num_trucks):
         time.sleep(1)
 
     # Pega o numero de partições para distribuir uniformemente a carga entre as partições
-    num_partitions = len(lag_reader.list_topics(KAFKA_TOPIC, timeout=10).topics[KAFKA_TOPIC].partitions)
+    num_partitions = get_num_partitions()
     tasks = [
         run_truck(truck_id, start_delay=random.uniform(0, SEND_INTERVAL_SECONDS), num_partitions=num_partitions)
         for truck_id in range(1, num_trucks + 1)
